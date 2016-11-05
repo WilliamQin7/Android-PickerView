@@ -9,6 +9,7 @@ import android.content.res.TypedArray;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.Typeface;
@@ -25,6 +26,7 @@ import com.bigkoo.pickerview.adapter.WheelAdapter;
 import com.bigkoo.pickerview.listener.OnItemSelectedListener;
 import com.bigkoo.pickerview.model.IPickerViewData;
 import com.bigkoo.pickerview.model.ImagePickerViewData;
+import com.bigkoo.pickerview.model.ImageTestModel;
 
 import java.util.ArrayList;
 import java.util.concurrent.Executors;
@@ -50,21 +52,18 @@ public class WheelImageView extends View {
     ScheduledExecutorService mExecutor = Executors.newSingleThreadScheduledExecutor();
     private ScheduledFuture<?> mFuture;
 
-    Paint paintOuterText;
-    Paint paintCenterText;
+    Paint paintOuterImage;
+    Paint paintCenterImage;
     Paint paintIndicator;
+    Paint paintTransparent;
 
     WheelAdapter adapter;
 
     private String label;//附加单位
-    int textSize;//选项的文字大小
-    boolean customTextSize;//自定义文字大小，为true则用于使setTextSize函数无效，只能通过xml修改
-    int maxTextWidth;
-    int maxTextHeight;
+    int maxImageWidth;
+    int maxImageHeight;
     float itemHeight;//每行高度
 
-    int textColorOut;
-    int textColorCenter;
     int dividerColor;
 
     // 条目间距倍数
@@ -119,26 +118,19 @@ public class WheelImageView extends View {
 
     public WheelImageView(Context context, AttributeSet attrs) {
         super(context, attrs);
-        textColorOut = getResources().getColor(R.color.pickerview_wheelview_textcolor_out);
-        textColorCenter = getResources().getColor(R.color.pickerview_wheelview_textcolor_center);
         dividerColor = getResources().getColor(R.color.pickerview_wheelview_textcolor_divider);
         //配合customTextSize使用，customTextSize为true才会发挥效果
-        textSize = getResources().getDimensionPixelSize(R.dimen.pickerview_textsize);
-        customTextSize = getResources().getBoolean(R.bool.pickerview_customTextSize);
         if (attrs != null) {
             TypedArray a = context.obtainStyledAttributes(attrs, R.styleable.pickerview, 0, 0);
             mGravity = a.getInt(R.styleable.pickerview_pickerview_gravity, Gravity.CENTER);
-            textColorOut = a.getColor(R.styleable.pickerview_pickerview_textColorOut, textColorOut);
-            textColorCenter = a.getColor(R.styleable.pickerview_pickerview_textColorCenter, textColorCenter);
             dividerColor = a.getColor(R.styleable.pickerview_pickerview_dividerColor, dividerColor);
-            textSize = a.getDimensionPixelOffset(R.styleable.pickerview_pickerview_textSize, textSize);
         }
-        ArrayList<Integer> list = new ArrayList<>();
-        for(int i=0; i<3; i++){
-            list.add(R.drawable.ic_626_seven);
-            list.add(R.drawable.ic_626_six);
+        ArrayList<ImageTestModel> list = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            list.add(new ImageTestModel(R.drawable.ic_626_seven));
+            list.add(new ImageTestModel(R.drawable.ic_626_six));
         }
-        ImageWheelAdapter<Integer> integerImageWheelAdapter = new ImageWheelAdapter<>(list, 4);
+        ImageWheelAdapter<ImageTestModel> integerImageWheelAdapter = new ImageWheelAdapter<>(list, 6);
         initLoopView(context);
         setAdapter(integerImageWheelAdapter);
 
@@ -160,22 +152,23 @@ public class WheelImageView extends View {
     }
 
     private void initPaints() {
-        paintOuterText = new Paint();
-        paintOuterText.setColor(textColorOut);
-        paintOuterText.setAntiAlias(true);
-        paintOuterText.setTypeface(Typeface.MONOSPACE);
-        paintOuterText.setTextSize(textSize);
+        paintOuterImage = new Paint();
+        //paintOuterImage.setColor(textColorOut);
+        paintOuterImage.setAntiAlias(true);
+        paintOuterImage.setTypeface(Typeface.MONOSPACE);
+        //paintOuterImage.setAlpha(120);
 
-        paintCenterText = new Paint();
-        paintCenterText.setColor(textColorCenter);
-        paintCenterText.setAntiAlias(true);
-        //paintCenterText.setTextScaleX(1.1F);
-        paintCenterText.setTypeface(Typeface.MONOSPACE);
-        paintCenterText.setTextSize(textSize);
+        paintCenterImage = new Paint();
+        //paintCenterImage.setColor(textColorCenter);
+        paintCenterImage.setAntiAlias(true);
+        paintCenterImage.setTypeface(Typeface.MONOSPACE);
 
         paintIndicator = new Paint();
         paintIndicator.setColor(dividerColor);
         paintIndicator.setAntiAlias(true);
+
+        paintTransparent = new Paint();
+        paintTransparent.setColor(0x80000000);
 
         if (android.os.Build.VERSION.SDK_INT >= 11) {
             setLayerType(LAYER_TYPE_SOFTWARE, null);
@@ -201,7 +194,7 @@ public class WheelImageView extends View {
         //计算两条横线和控件中间点的Y位置
         firstLineY = (measuredHeight - itemHeight) / 2.0F;
         secondLineY = (measuredHeight + itemHeight) / 2.0F;
-        centerY = (measuredHeight + maxTextHeight) / 2.0F - CENTERCONTENTOFFSET;
+        centerY = (measuredHeight + maxImageHeight) / 2.0F - CENTERCONTENTOFFSET;
         //初始化显示的item的position，根据是否loop
         if (initPosition == -1) {
             if (isLoop) {
@@ -221,31 +214,31 @@ public class WheelImageView extends View {
         Rect rect = new Rect();
         for (int i = 0; i < adapter.getItemsCount(); i++) {
             String s1 = getContentText(adapter.getItem(i));
-            paintCenterText.getTextBounds(s1, 0, s1.length(), rect);
+            paintCenterImage.getTextBounds(s1, 0, s1.length(), rect);
             int textWidth = rect.width();
-            if (textWidth > maxTextWidth) {
-                maxTextWidth = textWidth;
+            if (textWidth > maxImageWidth) {
+                maxImageWidth = textWidth;
             }
-            paintCenterText.getTextBounds("\u661F\u671F", 0, 2, rect); // 星期
+            paintCenterImage.getTextBounds("\u661F\u671F", 0, 2, rect); // 星期
             int textHeight = rect.height();
-            if (textHeight > maxTextHeight) {
-                maxTextHeight = textHeight;
+            if (textHeight > maxImageHeight) {
+                maxImageHeight = textHeight;
             }
         }
-        itemHeight = lineSpacingMultiplier * maxTextHeight;
+        itemHeight = lineSpacingMultiplier * maxImageHeight;
     }
 
     private void measureImageWidthHeight() {
         for (int i = 0; i < adapter.getItemsCount(); i++) {
             Bitmap bitmap = getContentBitmap(adapter.getItem(i));
             int width = bitmap.getWidth();
-            if (width > maxTextWidth) maxTextWidth = bitmap.getWidth();
+            if (width > maxImageWidth) maxImageWidth = bitmap.getWidth();
             int height = bitmap.getHeight();
-            if (height > maxTextHeight) maxTextHeight = bitmap.getHeight();
+            if (height > maxImageHeight) maxImageHeight = bitmap.getHeight();
         }
 
 
-        itemHeight = lineSpacingMultiplier * maxTextHeight;
+        itemHeight = lineSpacingMultiplier * maxImageHeight;
     }
 
     void smoothScroll(ACTION action) {
@@ -282,14 +275,6 @@ public class WheelImageView extends View {
      */
     public final void setCyclic(boolean cyclic) {
         isLoop = cyclic;
-    }
-
-    public final void setTextSize(float size) {
-        if (size > 0.0F && !customTextSize) {
-            textSize = (int) (context.getResources().getDisplayMetrics().density * size);
-            paintOuterText.setTextSize(textSize);
-            paintCenterText.setTextSize(textSize);
-        }
     }
 
     public final void setCurrentItem(int currentItem) {
@@ -365,9 +350,9 @@ public class WheelImageView extends View {
                 index = getLoopMappingIndex(index);
                 visibles[counter] = adapter.getItem(index);
             } else if (index < 0) {
-                visibles[counter] = "";
+                visibles[counter] = 0;
             } else if (index > adapter.getItemsCount() - 1) {
-                visibles[counter] = "";
+                visibles[counter] = 0;
             } else {
                 visibles[counter] = adapter.getItem(index);
             }
@@ -381,16 +366,16 @@ public class WheelImageView extends View {
         canvas.drawLine(0.0F, secondLineY, measuredWidth, secondLineY, paintIndicator);
         //单位的Label
         if (label != null) {
-            int drawRightContentStart = measuredWidth - getTextWidth(paintCenterText, label);
+            int drawRightContentStart = measuredWidth - getTextWidth(paintCenterImage, label);
             //靠右并留出空隙
-            canvas.drawText(label, drawRightContentStart - CENTERCONTENTOFFSET, centerY, paintCenterText);
+            canvas.drawText(label, drawRightContentStart - CENTERCONTENTOFFSET, centerY, paintCenterImage);
         }
         counter = 0;
         while (counter < itemsVisible) {
             canvas.save();
             // L(弧长)=α（弧度）* r(半径) （弧度制）
             // 求弧度--> (L * π ) / (π * r)   (弧长X派/半圆周长)
-            float itemHeight = maxTextHeight * lineSpacingMultiplier;
+            float itemHeight = maxImageHeight * lineSpacingMultiplier;
             double radian = ((itemHeight * counter - itemHeightOffset) * Math.PI) / halfCircumference;
             // 弧度转换成角度(把半圆以Y轴为轴心向右转90度，使其处于第一象限及第四象限
             float angle = (float) (90D - (radian / Math.PI) * 180D);
@@ -406,44 +391,44 @@ public class WheelImageView extends View {
                 //计算开始绘制的位置
                 measuredCenterContentStart(bitmap);
                 measuredOutContentStart(bitmap);
-                float translateY = (float) (radius - Math.cos(radian) * radius - (Math.sin(radian) * maxTextHeight) / 2D);
+                float translateY = (float) (radius - Math.cos(radian) * radius - (Math.sin(radian) * maxImageHeight) / 2D);
                 //根据Math.sin(radian)来更改canvas坐标系原点，然后缩放画布，使得文字高度进行缩放，形成弧形3d视觉差
                 canvas.translate(0.0F, translateY);
                 canvas.scale(1.0F, (float) Math.sin(radian));
-                if (translateY <= firstLineY && maxTextHeight + translateY >= firstLineY) {
+                if (translateY <= firstLineY && maxImageHeight + translateY >= firstLineY) {
                     // 条目经过第一条线
                     canvas.save();
                     canvas.clipRect(0, 0, measuredWidth, firstLineY - translateY);
                     canvas.scale(1.0F, (float) Math.sin(radian) * SCALECONTENT);
-                    //canvas.drawText(contentText, drawOutContentStart, maxTextHeight, paintOuterText);
-                    canvas.drawBitmap(bitmap, drawOutContentStart, (float) 0, paintOuterText);
+                    //canvas.drawText(contentText, drawOutContentStart, maxImageHeight, paintOuterImage);
+                    canvas.drawBitmap(bitmap, drawOutContentStart, (float) 0, paintOuterImage);
                     canvas.restore();
                     canvas.save();
                     canvas.clipRect(0, firstLineY - translateY, measuredWidth, (int) (itemHeight));
                     canvas.scale(1.0F, (float) Math.sin(radian) * 1F);
-                    //canvas.drawText(contentText, drawCenterContentStart, maxTextHeight - CENTERCONTENTOFFSET, paintCenterText);
-                    canvas.drawBitmap(bitmap, drawCenterContentStart, 0 - CENTERCONTENTOFFSET, paintCenterText);
+                    //canvas.drawText(contentText, drawCenterContentStart, maxImageHeight - CENTERCONTENTOFFSET, paintCenterImage);
+                    canvas.drawBitmap(bitmap, drawCenterContentStart, 0 - CENTERCONTENTOFFSET, paintCenterImage);
 
                     canvas.restore();
-                } else if (translateY <= secondLineY && maxTextHeight + translateY >= secondLineY) {
+                } else if (translateY <= secondLineY && maxImageHeight + translateY >= secondLineY) {
                     // 条目经过第二条线
                     canvas.save();
                     canvas.clipRect(0, 0, measuredWidth, secondLineY - translateY);
                     canvas.scale(1.0F, (float) Math.sin(radian) * 1.0F);
-                    //canvas.drawText(contentText, drawCenterContentStart, maxTextHeight - CENTERCONTENTOFFSET, paintCenterText);
-                    canvas.drawBitmap(bitmap, drawCenterContentStart, 0 - CENTERCONTENTOFFSET, paintCenterText);
+                    //canvas.drawText(contentText, drawCenterContentStart, maxImageHeight - CENTERCONTENTOFFSET, paintCenterImage);
+                    canvas.drawBitmap(bitmap, drawCenterContentStart, 0 - CENTERCONTENTOFFSET, paintCenterImage);
                     canvas.restore();
                     canvas.save();
                     canvas.clipRect(0, secondLineY - translateY, measuredWidth, (int) (itemHeight));
                     canvas.scale(1.0F, (float) Math.sin(radian) * SCALECONTENT);
-                    //canvas.drawText(contentText, drawOutContentStart, maxTextHeight, paintOuterText);
-                    canvas.drawBitmap(bitmap, drawOutContentStart, 0, paintOuterText);
+                    //canvas.drawText(contentText, drawOutContentStart, maxImageHeight, paintOuterImage);
+                    canvas.drawBitmap(bitmap, drawOutContentStart, 0, paintOuterImage);
                     canvas.restore();
-                } else if (translateY >= firstLineY && maxTextHeight + translateY <= secondLineY) {
+                } else if (translateY >= firstLineY && maxImageHeight + translateY <= secondLineY) {
                     // 中间条目
                     canvas.clipRect(0, 0, measuredWidth, (int) (itemHeight));
-                    //canvas.drawText(contentText, drawCenterContentStart, maxTextHeight - CENTERCONTENTOFFSET, paintCenterText);
-                    canvas.drawBitmap(bitmap, drawCenterContentStart, 0 - CENTERCONTENTOFFSET, paintCenterText);
+                    //canvas.drawText(contentText, drawCenterContentStart, maxImageHeight - CENTERCONTENTOFFSET, paintCenterImage);
+                    canvas.drawBitmap(bitmap, drawCenterContentStart, 0 - CENTERCONTENTOFFSET, paintCenterImage);
                     int preSelectedItem = adapter.indexOf(visibles[counter]);
                     if (preSelectedItem != -1) {
                         selectedItem = preSelectedItem;
@@ -453,8 +438,8 @@ public class WheelImageView extends View {
                     canvas.save();
                     canvas.clipRect(0, 0, measuredWidth, (int) (itemHeight));
                     canvas.scale(1.0F, (float) Math.sin(radian) * SCALECONTENT);
-                    //canvas.drawText(contentText, drawOutContentStart, maxTextHeight, paintOuterText);
-                    canvas.drawBitmap(bitmap, drawOutContentStart, 0, paintOuterText);
+                    //canvas.drawText(contentText, drawOutContentStart, maxImageHeight, paintOuterImage);
+                    canvas.drawBitmap(bitmap, drawOutContentStart, 0, paintOuterImage);
                     canvas.restore();
                 }
                 canvas.restore();
@@ -496,12 +481,14 @@ public class WheelImageView extends View {
         } else if (item instanceof ImagePickerViewData) {
             return BitmapFactory.decodeResource(context.getResources(), ((ImagePickerViewData) item).getImageId());
         }
-        return BitmapFactory.decodeResource(context.getResources(), R.drawable.ic_626_three);
+        Bitmap bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
+        bitmap.eraseColor(Color.WHITE);
+        return bitmap;
     }
 
     private void measuredCenterContentStart(String content) {
         Rect rect = new Rect();
-        paintCenterText.getTextBounds(content, 0, content.length(), rect);
+        paintCenterImage.getTextBounds(content, 0, content.length(), rect);
         switch (mGravity) {
             case Gravity.CENTER:
                 drawCenterContentStart = (int) ((measuredWidth - rect.width()) * 0.5);
@@ -531,7 +518,7 @@ public class WheelImageView extends View {
 
     private void measuredOutContentStart(String content) {
         Rect rect = new Rect();
-        paintOuterText.getTextBounds(content, 0, content.length(), rect);
+        paintOuterImage.getTextBounds(content, 0, content.length(), rect);
         switch (mGravity) {
             case Gravity.CENTER:
                 drawOutContentStart = (int) ((measuredWidth - rect.width()) * 0.5);
